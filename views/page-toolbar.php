@@ -1,2 +1,2 @@
-<li ng-if="settings.is_mobile" ng-click="addStage(true)"><i class="icon-nbd icon-nbd-content-copy " title="<?php _e('Duplicate design','web-to-print-online-designer'); ?>"></i></li>
+<li ng-if="settings.is_mobile" ng-show="resource.canAdd" ng-click="addStage(true)"><i class="icon-nbd icon-nbd-content-copy " title="<?php _e('Duplicate design','web-to-print-online-designer'); ?>"></i></li>
 <li ng-if="stages.length > 1"><i data-popup="popup-nbd-delete-stage-alert" nbd-popup-trigger class="icon-nbd icon-nbd-delete nbd-remove-stage" title="<?php _e('Delete design','web-to-print-online-designer'); ?>"></i></li>
