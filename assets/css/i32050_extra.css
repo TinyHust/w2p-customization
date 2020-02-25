@@ -47,3 +47,10 @@
 .contour-type.active span{
     color: #fff;
 }
+.contour-type.active svg path:not([fill="none"]) {
+    fill: #fff;
+}
+.contour-type.active svg path:not([stroke="none"]),
+.contour-type.active svg rect {
+    stroke: #fff;
+}

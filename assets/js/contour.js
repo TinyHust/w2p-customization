@@ -353,6 +353,7 @@ var Potrace = (function () {
             background: 'transparent',
             outline: 'blue',
             margin: 0,
+            offset: 0,
             needResize: false
         };
 
@@ -373,12 +374,12 @@ var Potrace = (function () {
         }, 500);
     }
 
-    function loadCanvas(imgData, width, height) {
-        var offset = 0, canvasWidth = width, canvasHeight = height * canvasWidth / width;
-        imgCanvas.width = canvasWidth + offset;
-        imgCanvas.height = height * imgCanvas.width / width;
+    function loadCanvas(img, width, height) {
+        var offset = info.offset;
+        imgCanvas.width = width;
+        imgCanvas.height = height;
         var ctx = imgCanvas.getContext('2d');
-        ctx.drawImage(imgData, 0, 0, width, height, offset, offset, canvasWidth, canvasHeight);
+        ctx.drawImage(img, 0, 0, width, height, offset, offset, width - 2 * offset, height - 2 * offset);
     }
 
     function loadBm() {
@@ -419,7 +420,6 @@ var Potrace = (function () {
         for (i = 0, j = 0; i < l; i += 4, j++) {
             if (imgDataCopy.data[i + 3] > threshold) {
                 setColorAtIndex(i, 0, 0, 0, 255);
-                //shade.push(i);
             } else {
                 setColorAtIndex(i, 0, 0, 0, 0);
             }

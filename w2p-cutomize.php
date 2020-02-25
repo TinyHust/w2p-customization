@@ -76,7 +76,8 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
             add_action('nbd_modern_after_design_wrap', array($this, 'i32050_after_design_wrap'), 10);
             add_action('nbd_extra_js', array($this, 'i32050_extra_js'), 10);
             add_action('nbd_extra_css', array($this, 'i32050_extra_css'), 10);
-            add_action('nbd_editor_process_action', array($this, 'i32050_process_action'), 10);
+            //add_action('nbd_editor_process_action', array($this, 'i32050_process_action'), 10);
+            add_filter( 'nbo_product_options', array( $this, 'i32050_nbo_product_options' ), 20, 2 );
         }
         public function ajax(){
             $ajax_events = array();
@@ -122,6 +123,37 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
         function i32050_process_action( $process_action ){
             $process_action = 'saveDataWithContour()';
             return $process_action;
+        }
+        function i32050_nbo_product_options( $options, $product_id ){
+            foreach ($options['fields'] as $key => $field){
+                if( isset($field['general']['attributes']['bg_type']) && $field['general']['attributes']['bg_type'] == 'i' ){
+                    foreach ($field['general']['attributes']['options'] as $op_index => $option ){
+                        foreach( $option['bg_image'] as $bg_index => $bg ){
+                            $attachment_id = absint($bg);
+                            if( $attachment_id ){
+                                $full_src   = wp_get_attachment_image_src( $attachment_id, 'large' );
+                                $path       = get_attached_file( $attachment_id );
+                                $type       = pathinfo( $path, PATHINFO_EXTENSION );
+                                $data       = file_get_contents( $path );
+                                $base64     = 'data:image/' . $type . ';base64,' . base64_encode( $data );
+
+                                $options['fields'][$key]['general']['attributes']['options'][$op_index]['pattern'][$bg_index] = array(
+                                    'pattern_src'      => $base64,
+                                    'pattern_width'    => $full_src[1],
+                                    'pattern_height'   => $full_src[2]
+                                );
+                            }else{
+                                $options['fields'][$key]['general']['attributes']['options'][$op_index]['pattern'][$bg_index] = array(
+                                    'pattern_src'      => '',
+                                    'pattern_width'    => 0,
+                                    'pattern_height'   => 0
+                                );
+                            }
+                        }
+                    };
+                }
+            }
+            return $options;
         }
 
         /* ================================== */
