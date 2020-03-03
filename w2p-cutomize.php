@@ -78,6 +78,13 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
             add_action('nbd_extra_css', array($this, 'i32050_extra_css'), 10);
             //add_action('nbd_editor_process_action', array($this, 'i32050_process_action'), 10);
             add_filter( 'nbo_product_options', array( $this, 'i32050_nbo_product_options' ), 20, 2 );
+            add_action( 'after_nbd_save_customer_design', array( $this, 'i32050_save_contour_file' ), 20, 1 );
+            add_action( 'nbd_synchronize_output', array( $this, 'i32050_change_order_status' ), 20, 3 );
+            add_filter( 'nbd_synchronize_files', array( $this, 'i32050_synchronize_files' ), 10, 5 );
+            add_action( 'init', array( $this, 'i32050_register_order_status' ) );
+            add_filter( 'wc_order_statuses', array( $this, 'i32050_wc_order_statuses' ) );
+            add_action( 'woocommerce_before_add_to_cart_button', array($this, 'i32050_before_add_to_cart_button'), 30 );
+            add_filter( 'woocommerce_product_single_add_to_cart_text', array( $this, 'i32050_add_to_cart_text' ), 9999, 1 );
         }
         public function ajax(){
             $ajax_events = array();
@@ -94,10 +101,12 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
             $animation_dir = 'slideInLeft';
             ?>
             <li id="nav-contour" class="tab animated <?php esc_attr_e( $animation_dir ); ?> animate800" ><i class="icon-nbd icon-nbd-bottom-center"></i><span><?php esc_html_e('Cutline','web-to-print-online-designer'); ?></span></li>
+            <li id="nav-background" ng-class="getBackgroundTabClass()" class="tab animated <?php esc_attr_e( $animation_dir ); ?> animate800" ><i class="icon-nbd icon-nbd-fill-color"></i><span><?php esc_html_e('Background','web-to-print-online-designer'); ?></span></li>
             <?php
         }
         function i32050_tab_content(){
             include_once(W2P_NBD_PLUGIN_DIR . 'views/i32050-tab-contour.php');
+            include_once(W2P_NBD_PLUGIN_DIR . 'views/i32050-tab-bakground.php');
         }
         function i32050_before_design_wrap(){
             ?>
@@ -139,12 +148,14 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
 
                                 $options['fields'][$key]['general']['attributes']['options'][$op_index]['pattern'][$bg_index] = array(
                                     'pattern_src'      => $base64,
+                                    'pattern_url'      => $full_src[0],
                                     'pattern_width'    => $full_src[1],
                                     'pattern_height'   => $full_src[2]
                                 );
                             }else{
                                 $options['fields'][$key]['general']['attributes']['options'][$op_index]['pattern'][$bg_index] = array(
                                     'pattern_src'      => '',
+                                    'pattern_url'      => '',
                                     'pattern_width'    => 0,
                                     'pattern_height'   => 0
                                 );
@@ -154,6 +165,60 @@ if(!class_exists('W2P_NBD_CUSTOMIZE')){
                 }
             }
             return $options;
+        }
+        function i32050_save_contour_file( $result ){
+            $nbd_item_key   = $result['folder'];
+            $path           = NBDESIGNER_CUSTOMER_DIR . '/' . $nbd_item_key;
+            $path_config    = $path . '/config.json';
+            $config         = nbd_get_data_from_json( $path_config );
+            if( isset( $config->cutlines ) ){
+                $cutlines = (array) $config->cutlines;
+                foreach( $cutlines as $key => $cutline ){
+                    $cutline_path = $path . '/contour_' . $key . '.svg';
+                    file_put_contents( $cutline_path, rawurldecode( $cutline ) );
+                }
+            }
+        }
+        function i32050_change_order_status( $nbd_item_key, $order_id, $order_item_id ){
+            $order = wc_get_order( $order_id );
+            $order->update_status( 'nbd-production' );
+        }
+        function i32050_synchronize_files( $files, $root_path, $nbd_item_key, $order_id, $order_item_id ){
+            $path               = NBDESIGNER_CUSTOMER_DIR .'/'. $nbd_item_key . '/contour_frame_0.svg';
+            $destination_path   = $root_path . $order_id .'/'. $order_item_id .'/cutline.svg';
+            if( file_exists( $path ) ){
+                $files[] =  array(
+                    'src'   => $path,
+                    'dst'   => $destination_path
+                );
+            }
+            return $files;
+        }
+        function i32050_register_order_status(){
+            register_post_status( 'wc-nbd-production', array(
+                'label'                     => __( 'Production', 'web-to-print-online-designer' ),
+                'public'                    => true,
+                'exclude_from_search'       => false,
+                'show_in_admin_all_list'    => true,
+                'show_in_admin_status_list' => true,
+                'label_count'               => _n_noop( 'Production <span class="count">(%s)</span>', 'Production <span class="count">(%s)</span>', 'web-to-print-online-designer' )
+            ) );
+        }
+        function i32050_wc_order_statuses( $order_statuses ){
+            $order_statuses['wc-nbd-production']  = __( 'Production', 'web-to-print-online-designer' );
+            return $order_statuses;
+        }
+        function i32050_before_add_to_cart_button(){
+            $post_id        = get_the_ID();
+            $post_id        = get_wpml_original_id( $post_id );
+            $redirect_link  = add_query_arg( array(
+                'product_id'    => $post_id,
+                'view'          => 'm'
+            ), getUrlPageNBD( 'create' ) );
+            include_once( W2P_NBD_PLUGIN_DIR . 'views/i32050_before_add_to_cart.php' );
+        }
+        function i32050_add_to_cart_text(){
+            return esc_attr__( 'Get start', 'web-to-print-online-designer' );
         }
 
         /* ================================== */

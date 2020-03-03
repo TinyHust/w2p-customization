@@ -54,3 +54,7 @@
 .contour-type.active svg rect {
     stroke: #fff;
 }
+.nbd-cuz-inactive-tab {
+    pointer-events: none;
+    opacity: 0.5;
+}

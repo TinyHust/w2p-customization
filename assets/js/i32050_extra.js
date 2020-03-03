@@ -1,6 +1,9 @@
 jQuery(document).on( 'nbd_app_loaded', function(){
     var $scope = angular.element( document.getElementById( 'design-container' ) ).scope();
     $scope.currentContourType = '';
+    if( angular.isDefined( NBDESIGNCONFIG.product_data.config ) && angular.isDefined( NBDESIGNCONFIG.product_data.config.contourType ) ){
+        $scope.currentContourType = NBDESIGNCONFIG.product_data.config.contourType;
+    }
     $scope.cutlines = [];
     $scope.resetContour = function(stageIndex){
         var stageIndex = stageIndex ? stageIndex : $scope.currentStage;
@@ -10,8 +13,8 @@ jQuery(document).on( 'nbd_app_loaded', function(){
         var stageIndex = stageIndex ? stageIndex : $scope.currentStage,
         _stage = $scope.stages[stageIndex],
         _canvas = _stage.canvas,
-        width = _canvas.width,
-        height = _canvas.height,
+        width = Math.floor( _canvas.width ),
+        height = Math.floor( _canvas.height ),
         info = {
             outline: '#FF00FF',
             width: width,
@@ -19,15 +22,16 @@ jQuery(document).on( 'nbd_app_loaded', function(){
         };
 
         function checkNeedResize( img ){
-            var _canvas = document.createElement("canvas");
-            _canvas.width = width;
-            _canvas.height = height;
-            var _ctx = _canvas.getContext('2d');
+            var kanvas = document.createElement("canvas");
+            kanvas.width = width;
+            kanvas.height = height;
+            var _ctx = kanvas.getContext('2d');
             _ctx.drawImage(img, 0, 0, width, height, 0, 0, width, height);
-            var imgdataobj = _ctx.getImageData(0, 0, width, height);
+            var imgdataobj = _ctx.getImageData(0, 0, width, height),
+            _margin = info.margin + 1;
     
             var i, j, check = false, index;
-            for (j = 0; j < info.margin; j++) {
+            for (j = 0; j < _margin; j++) {
                 if( check ){
                     break;
                 }
@@ -43,7 +47,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             }
             if( check ) return check;
     
-            for (j = height - info.margin; j < height; j++) {
+            for (j = height - _margin; j < height; j++) {
                 if( check ){
                     break;
                 }
@@ -63,7 +67,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                     break;
                 }
     
-                for (i = 0; i < info.margin; i++) {
+                for (i = 0; i < _margin; i++) {
                     index = (width * j + i) * 4;
                     if( imgdataobj.data[index + 3] > 0 ) {
                         check = true;
@@ -78,7 +82,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                     break;
                 }
     
-                for (i = width - info.margin; i < width; i++) {
+                for (i = width - _margin; i < width; i++) {
                     index = (width * j + i) * 4;
                     if( imgdataobj.data[index + 3] > 0 ) {
                         check = true;
@@ -90,9 +94,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             return check;
         }
 
-        function resizeStage(){
-            var ratio = ( width - 2 * info.margin ) / width;
-            
+        function resizeStage( callback ){
             var objs = [];
             _canvas.forEachObject(function(obj, index) {
                 if( obj.get('selectable') ) objs.push(obj);
@@ -104,25 +106,36 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             _canvas.setActiveObject(selection);
 
             obj = _canvas.getActiveObject();
-            var scale = _stage.states.scaleRange[_stage.states.currentScaleIndex].ratio,
-                scaleX = obj.scaleX,
-                scaleY = obj.scaleY,
-                left = obj.left / scale,
-                top = obj.top / scale;
+            var scale = _stage.states.scaleRange[_stage.states.currentScaleIndex].ratio;
+
+            var scaleX = obj.scaleX,
+            scaleY = obj.scaleY,
+            objWidth = obj.width * scaleX / scale,
+            objHeight = obj.height * scaleY / scale,
+            newRatio, ratio = 1;
+
+            if( objWidth > ( width - 2 * info.margin - 2 ) || objHeight > ( height - 2 * info.margin - 2 ) ){
+                if( objWidth > ( width - 2 * info.margin - 2 ) ){
+                    ratio = ( width - 2 * info.margin - 2 ) / width;
+                }
+                if( objHeight > ( height - 2 * info.margin - 2 ) ){
+                    newRatio = ( height - 2 * info.margin - 2 ) / objHeight;
+                    ratio = newRatio < ratio ? newRatio : ratio;
+                }
+            }
+
             var tempScaleX = scaleX * ratio,
-                tempScaleY = scaleY * ratio,
-                tempLeft = info.margin + left * ratio,
-                tempTop = info.margin + top * ratio;
+                tempScaleY = scaleY * ratio;
 
             obj.scaleX = tempScaleX;
             obj.scaleY = tempScaleY;
-            obj.left = tempLeft;
-            obj.top = tempTop;
+            _canvas.viewportCenterObject( obj );
             obj.setCoords();
 
             $scope.deactiveAllLayer( stageIndex );
 
             $scope.renderStage( stageIndex );
+            callback();
         }
 
         $scope.deactiveAllLayer( stageIndex );
@@ -181,7 +194,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                             strokec = "transparent";
                         }
 
-                        svg += '<defs><clipPath id="stiker_contour_' + stageIndex + '"><path d="' + pathcmd + '" /></clipPath></defs>';
+                        //svg += '<defs><clipPath id="stiker_contour_' + stageIndex + '"><path d="' + pathcmd + '" /></clipPath></defs>';
                         svg += '<path d="';
                         svg += pathcmd;
                         svg += '" stroke="' + strokec + '" fill="' + fillc + '"' + fillrule + '/></svg>';
@@ -261,29 +274,31 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                         if( !checkNeedResize( img ) ){
                             _potrace( info, img );
                         }else{
-                            resizeStage();
-                            setTimeout(function(){
-                                var new_data = _canvas.toDataURL(),
-                                new_img = new Image;
-                                new_img.onload = function(){
-                                    _potrace( info, new_img );
-                                };
-                                new_img.src = new_data;
-                            }, 100);
+                            resizeStage( function(){
+                                setTimeout(function(){
+                                    var new_data = _canvas.toDataURL(),
+                                    new_img = new Image;
+                                    new_img.onload = function(){
+                                        _potrace( info, new_img );
+                                    };
+                                    new_img.src = new_data;
+                                }, 100);
+                            });
                         }
                     }
 
+                    var minMargin = Math.floor( info.width / 50 );
                     switch( type ){
                         case 's':
-                            info.margin = 10;
+                            info.margin = minMargin;
                             prepareBeforePotrace();
                             break;
                         case 'm':
-                            info.margin = 20;
+                            info.margin = 2 * minMargin;
                             prepareBeforePotrace();
                             break;
                         case 'l':
-                            info.margin = 30;
+                            info.margin = 3 * minMargin;
                             prepareBeforePotrace();
                             break;
                         case 'r':
@@ -376,7 +391,12 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                     break;
             }
             jQuery('#stage-container-' + key + ' .nbd-stage-pattern svg ' + selector).attr('fill', '#ffffff');
-            if( !!$scope.cutlines[key] && !!side.pattern ){
+
+            if(!!side.pattern && side.pattern.type == 'image' && !side.pattern.src ){
+                $scope.backgroundColorPattern = true;
+            }
+
+            if( !!$scope.cutlines[key] && !!$scope.cutlines[key].clipPath && !!side.pattern ){
                 var _stage = $scope.stages[key],
                 _canvas = _stage.canvas,
                 width = _canvas.width,
@@ -386,7 +406,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                     var svg = '<svg version="1.1" width="' + width + '" height="' + height + '"' + ' viewBox="0 0 ' + width + ' ' + height + '" ' + ' xmlns="http://www.w3.org/2000/svg">';
                     svg += '<defs>';
                     svg += $scope.cutlines[key].shadow;
-                    svg += $scope.cutlines[key].pattern;
+                    svg += $scope.cutlines[key].pattern ? $scope.cutlines[key].pattern : '';
                     svg += '</defs>';
                     svg += $scope.cutlines[key].clipPath + '</svg>';
                     return svg;
@@ -400,15 +420,43 @@ jQuery(document).on( 'nbd_app_loaded', function(){
                     var svg = buildPatternSvg();
                     jQuery('#stage-container-' + key + ' .nbd-stage-pattern').html('').append( svg );
                     jQuery('#stage-container-' + key + ' .nbd-stage-pattern svg ' + selector).attr('fill', 'url(#material_pattern_' + key + ')');
+
+                    delete $scope.cutlines[key].bgColorPattern;
                 }else{
                     delete $scope.cutlines[key].pattern;
+                    $scope.backgroundColorPattern = true;
+                    if(side.pattern.type == 'color'){
+                        $scope.cutlines[key].bgColorPattern = side.pattern.color;
+                        var svg = buildPatternSvg();
+                        jQuery('#stage-container-' + key + ' .nbd-stage-pattern').html('').append( svg );
+                        jQuery('#stage-container-' + key + ' .nbd-stage-pattern svg ' + selector).attr('fill', side.pattern.color);
+                    }
                 }
             }
         });
     };
+    $scope.backgroundColorPattern = false;
+    $scope.currentBackgroundPattern = null;
+    $scope.changeBackgroundPattern = function( color ){
+        angular.forEach($scope.settings.product_data.product, function(side, key){
+            side.pattern = {
+                type: 'color',
+                color: color
+            };
+        });
+        $scope.afterChangeExtraOdOptions();
+    };
+    $scope.getBackgroundTabClass = function(){
+        var active = false;
+        if( $scope.backgroundColorPattern ){
+            active = true;
+        }
+        return active ? '' : 'nbd-cuz-inactive-tab';
+    };
     $scope.saveDataWithContour = function( callback ){
         var type = $scope.currentContourType != '' ? $scope.currentContourType : 'm',
         readyStages = [];
+        $scope.resource.config.contourType = $scope.currentContourType;
         
         function createSvgPreview( index ){
             var _stage = $scope.stages[index],
@@ -417,19 +465,18 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             height = _canvas.height,
             image = _canvas.toDataURL();
 
-            if( !!$scope.cutlines[index].pattern ){
-                patternSvgFillc = 'url(#material_pattern_' + index + ')';
-            }else{
-                patternSvgFillc = '#ffffff';
-            }
-
             var svg = '<svg version="1.1" width="' + width + '" height="' + height + '"' + ' viewBox="0 0 ' + width + ' ' + height + '" ' + ' xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">';
             svg += '<defs>';
             svg +=      $scope.cutlines[index].shadow;
             if( !!$scope.cutlines[index].pattern ) svg += $scope.cutlines[index].pattern;
             svg +=      '<clipPath id="stiker_contour_' + index + '">' + $scope.cutlines[index].clipPath + '</clipPath>';
             svg += '</defs>';
-            svg +=      $scope.cutlines[index].patternPath;
+            if( !!$scope.cutlines[index].patternPath ){
+                if( !!$scope.cutlines[index].bgColorPattern ){
+                    $scope.cutlines[index].patternPath = $scope.cutlines[index].patternPath.replace( /fill="(.*?)"/, 'fill="' + $scope.cutlines[index].bgColorPattern + '"' );
+                }
+                svg +=      $scope.cutlines[index].patternPath;
+            }
             svg +=      '<image x="0" y="0" width="' + width + '" height="' + height + '"' + ' xlink:href="' + image + '" />';
             svg += '</svg>';
             return svg;
@@ -446,13 +493,19 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             var canvasSvg = _canvas.toSVG(),
             newCanvasvg,
             clipPath = '<clipPath id="stiker_contour_' + index + '">' + $scope.cutlines[index].clipPath + '</clipPath>';
-            newCanvasvg = canvasSvg.replace('<\/defs>', clipPath + '<\/defs><g clip-path="url(#stiker_contour_' + index + ')"><rect x="0" y="0" width="' + width + '" height="' + height + '" fill="red"/>');
+            
+            if( !!$scope.cutlines[index].bgColorPattern ){
+                newCanvasvg = canvasSvg.replace('<\/defs>', clipPath + '<\/defs><g clip-path="url(#stiker_contour_' + index + ')"><rect x="0" y="0" width="' + width + '" height="' + height + '" fill="' + $scope.cutlines[index].bgColorPattern + '" />');
+            } else {
+                newCanvasvg = canvasSvg.replace('<\/defs>', clipPath + '<\/defs><g clip-path="url(#stiker_contour_' + index + ')">');
+            }
+
             newCanvasvg = newCanvasvg.replace('<\/svg>', '<\/g><\/svg>');
-            console.log( newCanvasvg );
             _stage.svg = newCanvasvg;
 
 
             $scope.resource.jsonDesign[key] = _canvas.toJSON($scope.includeExport);
+            $scope.resource.config.cutlines[key] = encodeURIComponent( $scope.cutlines[index].contour );
 
             var svg = createSvgPreview( index ),
             svgBlob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"}),
@@ -474,7 +527,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
 
         _.each($scope.stages, function(stage, index){
             readyStages[index] = false;
-            if( !$scope.cutlines[index] ){
+            if( !$scope.cutlines[index] || !$scope.cutlines[index].clipPath ){
                 $scope.initContour( type, index, function(){
                     createPreview( index );
                 } );
@@ -483,6 +536,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
             }
         });
 
+        var timeout = 0;
         var interval = setInterval(function(){
             var check = true;
 
@@ -492,6 +546,11 @@ jQuery(document).on( 'nbd_app_loaded', function(){
 
             if( check ){
                 callback();
+                clearInterval( interval );
+            }
+
+            timeout++;
+            if( timeout > 30 ){
                 clearInterval( interval );
             }
         }, 100);
@@ -517,6 +576,7 @@ jQuery(document).on( 'nbd_app_loaded', function(){
         $scope.maybeZoomStage = false;
         $scope.saveDesign();
 
+        $scope.resource.config.cutlines = {};
         $scope.saveDataWithContour(function(){
             var NBDDataFactory = angular.element(document.getElementById('design-container')).injector().get('NBDDataFactory');
 
